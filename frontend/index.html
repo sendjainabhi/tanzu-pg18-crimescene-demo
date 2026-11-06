@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tanzu PostgreSQL | Crime Scene Intelligence</title>
+<style>
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  display:flex;
+  font:14px Arial,sans-serif;
+  background:#0d1726;
+  color:#eaf2fa;
+}
+#viewer { width:70%; height:100vh; }
+#panel {
+  width:30%;
+  min-width:320px;
+  height:100vh;
+  overflow-y:auto;
+  padding:24px;
+  background:#17263a;
+}
+h1 { font-size:21px; margin:0 0 8px; }
+h2 { font-size:16px; margin-top:25px; }
+.subtitle { color:#a9bfd5; }
+.metric {
+  background:#253a52;
+  border-radius:8px;
+  padding:14px;
+  margin:18px 0;
+}
+button,select,input {
+  padding:11px;
+  margin:8px 0;
+  border-radius:5px;
+}
+button {
+  background:#3183df;
+  border:0;
+  color:white;
+  cursor:pointer;
+}
+button:hover { background:#4a9af1; }
+pre {
+  background:#0b1524;
+  padding:12px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  font-size:11px;
+}
+#status { color:#afd0e7; }
+#results { line-height:1.7; }
+@media(max-width:800px) {
+  body { flex-direction:column; }
+  #viewer { width:100%; height:55vh; }
+  #panel { width:100%; height:auto; }
+}
+</style>
+</head>
+<body>
+
+<div id="viewer"></div>
+
+<aside id="panel">
+  <h1>Tanzu PostgreSQL 18.6</h1>
+  <div class="subtitle">
+    3D Crime Scene Intelligence
+  </div>
+
+  <div class="metric" id="summary">
+    Loading scene...
+  </div>
+
+  <label for="k">Nearest visible windows:</label>
+  <select id="k">
+    <option value="3">3</option>
+    <option value="5" selected>5</option>
+    <option value="10">10</option>
+    <option value="20">20</option>
+  </select>
+
+  <button id="run">Analyze 3D Visibility</button>
+  <button id="moveIncident">Move Incident: OFF</button>
+
+  <p id="status"></p>
+
+  <h2>Visibility Results</h2>
+  <div id="results"></div>
+
+  <h2>Obstacle Controls</h2>
+  <p class="subtitle">
+    Toggle trees, vehicles and walls.
+    Changes are stored in Tanzu PostgreSQL.
+  </p>
+  <div id="obstacleControls"></div>
+
+  <h2>Query Performance</h2>
+  <div class="metric" id="performanceMetrics">
+    Run visibility analysis to view metrics.
+  </div>
+
+  <h2>CCTV Coverage Analysis</h2>
+  <p class="subtitle">
+    Analyze nearby cameras and visualize their
+    approximate horizontal fields of view.
+  </p>
+
+  <button id="analyzeCCTV">
+    Analyze CCTV Coverage
+  </button>
+
+  <button id="toggleCCTVCones">
+    Hide CCTV Coverage
+  </button>
+
+  <div id="cctvResults"></div>
+
+  <h2>Similar Investigation Search</h2>
+  <p class="subtitle">
+    Search synthetic investigation cases using pgvector.
+  </p>
+
+  <input
+    id="caseQuery"
+    type="text"
+    placeholder="e.g. vehicle obstruction witness"
+    style="width:100%"
+  >
+
+  <button id="searchCases">
+    Search Similar Cases
+  </button>
+
+  <div id="caseResults"></div>
+
+  <h2>SQL Inspector</h2>
+  <pre id="sql">Waiting for spatial query...</pre>
+
+  <p class="subtitle">
+    Green: visible window or potentially covering CCTV.
+    Red: obstructed sightline.
+    Gray: outside CCTV coverage.
+    Analysis uses simplified geometry.
+  </p>
+</aside>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

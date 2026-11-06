@@ -1,0 +1,33 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets
+.env
+.env.*
+!.env.example
+.netrc
+*.pem
+*.key
+
+# Backups and database dumps
+backups/
+*.dump
+*.backup
+*.tar.gz
+
+# Runtime
+logs/
+*.log
+*.pid
+
+# Editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Archives
+*.zip
