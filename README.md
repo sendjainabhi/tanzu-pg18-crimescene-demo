@@ -299,7 +299,127 @@ backups/
 .DS_Store
 ```
 
-Keep the locally hosted Three.js module and comply with its upstream license terms.
+
+## Starting the Demo
+
+Once Tanzu PostgreSQL, PostGIS, pgvector, and the Python dependencies are installed and the database is populated, the demo can be started using a single script.
+
+### 1. Connect to the Rocky Linux VM
+
+From your Mac terminal:
+
+```bash
+ssh rocky@YOUR_VM_IP
+```
+
+### 2. Start the application
+
+Navigate to the project directory:
+
+```bash
+cd /mnt/workshop_assets/tanzu-crime-demo
+```
+
+Make the startup script executable (first time only):
+
+```bash
+chmod +x start_demo.sh
+```
+
+Start the demo:
+
+```bash
+./start_demo.sh
+```
+
+The startup script automatically:
+
+- Configures the VMware PostgreSQL 18 binary path.
+- Activates the existing Python virtual environment.
+- Checks that Tanzu PostgreSQL is running.
+- Verifies connectivity to the `crime_scene` database.
+- Validates that PostGIS and pgvector are enabled.
+- Checks required Python dependencies and application files.
+- Detects whether the demo is already running.
+- Starts the Flask application on port 5000.
+- Displays the SSH tunnel command for browser access.
+
+### 3. Access the demo from your Mac
+
+Keep the VM terminal running.
+
+Open a **new terminal on your Mac** and execute the SSH command displayed by the startup script:
+
+```bash
+ssh -N -L 5000:127.0.0.1:5000 rocky@YOUR_VM_IP
+```
+
+Replace `YOUR_VM_IP` with the reachable IP address or hostname of your VM.
+
+Keep this terminal open while using the demo.
+
+### 4. Open the dashboard
+
+Open Chrome or another WebGL-enabled browser:
+
+**http://localhost:5000**
+
+The dashboard provides:
+
+- Interactive 3D crime-scene visualization.
+- PostGIS-powered spatial and line-of-sight analysis.
+- Dynamic incident relocation and obstacle management.
+- CCTV coverage and field-of-view visualization.
+- pgvector-based similar investigation search.
+- SQL query inspection and application performance metrics.
+
+### 5. Stop the application
+
+To stop the demo, return to the VM terminal running Flask and press:
+
+```text
+Ctrl+C
+```
+
+Close the SSH tunnel from the Mac terminal using `Ctrl+C`.
+
+### Troubleshooting
+
+**PostgreSQL is not accepting connections**
+
+Verify that the PostgreSQL server is running:
+
+```bash
+/opt/vmware/postgres/18/bin/pg_isready
+```
+
+**Python virtual environment not found**
+
+Verify the existing virtual environment:
+
+```bash
+ls -ld /mnt/workshop_assets/tanzu-crime-demo/.venv
+```
+
+**Port 5000 is already in use**
+
+Check whether the demo is already running:
+
+```bash
+curl http://127.0.0.1:5000/api/health
+```
+
+**Dashboard is not accessible from the Mac**
+
+Ensure the SSH tunnel is running and open:
+
+```text
+http://localhost:5000
+```
+
+The Flask application binds to localhost for the workshop environment and should not be exposed directly to an untrusted network.
+
+
 
 ## Deployment readiness
 
