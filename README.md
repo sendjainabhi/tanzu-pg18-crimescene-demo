@@ -304,3 +304,10 @@ Keep the locally hosted Three.js module and comply with its upstream license ter
 ## Deployment readiness
 
 The three accompanying files fill the missing initial-scene and test-wall setup gaps. **The full fresh-VM deployment still depends on your existing `schema.sql`, `investigation_schema.sql`, Python scripts, Flask frontend source and compatible Three.js library.** Validate on a fresh demo VM before presenting it as a fully tested one-command deployment.
+
+## VMware Tanzu PostgreSQL Installation
+
+For PostgreSQL 18.6 installation, PostGIS and pgvector setup,
+and environment prerequisites, see:
+
+[PostgreSQL Installation Guide](POSTGRES_INSTALL.md)
