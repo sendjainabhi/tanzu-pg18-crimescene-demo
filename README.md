@@ -1,228 +1,190 @@
 # Tanzu PostgreSQL 3D Crime Scene Intelligence
 
-## Overview
+An interactive **synthetic crime-scene investigation** demo showcasing VMware Tanzu PostgreSQL 18.6 with PostGIS 3.6.1, pgvector 0.8.6, Python Flask and locally hosted Three.js.
 
-A synthetic urban investigation workshop demonstrating **Tanzu PostgreSQL 18.6**, **PostGIS 3.6.1** and **pgvector 0.8.6** with Python Flask and a locally hosted Three.js browser viewer.
+## Capabilities
 
-**Functions:** 3D city objects, nearest-k windows, movable incident location, obstruction-aware sightlines, obstacle toggles, CCTV field-of-view sectors, pgvector similarity search, SQL inspection and application timing.
+- Reconstruct an urban scene from PostgreSQL building footprints, windows and object metadata.
+- Move an incident and query the nearest windows using PostGIS 3D distances.
+- Show unobstructed and blocked sightlines, and toggle trees, vehicles and walls in the database.
+- Analyze potential CCTV coverage and render approximate horizontal camera viewing sectors.
+- Search synthetic investigation cases using pgvector cosine similarity.
+- Inspect SQL and application processing times.
 
-**Accuracy note:** PostGIS handles 3D spatial storage, proximity and distances. Python handles simplified line-of-sight and CCTV checks. CCTV sectors are approximate horizontal views, and the 384-dimensional vector encoder uses deterministic token features, not a trained semantic model. This is not forensic-grade analysis.
+**Demo limitations:** PostGIS provides spatial storage, filtering and distance functions. Python computes simplified box/sphere obstruction and camera-angle tests. Three.js renders results. CCTV is not calibrated video coverage; deterministic hashed-token vectors are not trained semantic embeddings. This is not forensic-grade software.
 
 ## 1. Prerequisites
 
-- Rocky Linux 9 / RHEL 9-compatible VM (original environment: x86_64).
-- Suggested starting resources: 2 vCPU, 4 GB RAM, 5 GB free disk beyond the PostgreSQL installation.
-- VMware PostgreSQL **18.6**, running and initialized, with vendor-matched **PostGIS 3.6.1** and **pgvector 0.8.6** packages installed. Avoid mixing incompatible PostgreSQL extension builds.
-- Python **3.9** with `venv` and `pip` (the original VM used Python 3.9).
-- Approved PyPI/internal package repository or offline wheels. Python packages: Flask, psycopg 3 (binary), NumPy, trimesh, Flask-CORS as needed.
-- `psql`, `createdb`, `pg_dump`, `pg_restore`, `curl`, `unzip`, SSH.
-- Browser with WebGL enabled.
-- `frontend/vendor/three.module.js` from the working application, stored locally. Do not rely on public CDNs in restricted environments.
-- Local Unix socket connectivity to PostgreSQL. The original VM uses `/tmp`.
+| Requirement | Version / notes |
+|---|---|
+| OS | Rocky Linux 9 / compatible RHEL 9 x86_64 (original environment) |
+| Resources | Suggested starting point: 2 vCPU, 4 GB RAM, additional disk for PostgreSQL |
+| Database | VMware Tanzu PostgreSQL **18.6** |
+| Extensions | Vendor-matched **PostGIS 3.6.1** and **pgvector 0.8.6** |
+| Python | **3.9** used on original VM, `venv`, `pip` |
+| Python dependencies | Flask, psycopg[binary], NumPy, trimesh; Flask-CORS if needed |
+| Browser | WebGL-capable Chrome or equivalent |
+| Access | SSH to VM; Flask stays bound to 127.0.0.1 |
+| Three.js | Local `frontend/vendor/three.module.js` (no CDN required) |
 
-The original demo was developed on Rocky Linux 9. On another operating system, adapt PostgreSQL installation, Python packages, and service commands.
+### Official Broadcom references
 
-## 2. Repository layout
+- [Broadcom Support Portal](https://support.broadcom.com/) — download **Postgres Server and Extensions 18.6.0 for RHEL9** for your entitlement.
+- [Broadcom TechDocs](https://techdocs.broadcom.com/) — locate the version-specific *VMware Tanzu for Postgres 18.6* installation, initialization and supported extensions instructions.
+- [Broadcom KB: extension dependency issues](https://knowledge.broadcom.com/external/article/436369/missing-extensions-or-library-errors-aft.html) — host-library and extension package troubleshooting.
 
-```text
-tanzu-crime-demo/
-├── backend/
-│   ├── app.py
-│   ├── spatial_analysis.py
-│   ├── visibility_engine.py
-│   ├── obstacle_controls.py
-│   ├── cctv_analysis.py
-│   ├── incident_embeddings.py
-│   └── vector_search.py
-├── frontend/
-│   ├── index.html
-│   ├── js/
-│   │   ├── main.js
-│   │   ├── api_client.js
-│   │   ├── object_renderer.js
-│   │   ├── visibility_view.js
-│   │   ├── obstacle_controls.js
-│   │   ├── investigation_tools.js
-│   │   └── cctv_renderer.js
-│   └── vendor/three.module.js
-├── database/
-│   ├── initial_scene.sql
-│   ├── schema.sql
-│   ├── investigation_schema.sql
-│   └── demo_obstruction.sql
-├── scripts/
-│   ├── load_scene.py
-│   └── load_investigations.py
-├── tests/test_visibility.py
-├── requirements.txt
-└── README.md
-```
+Vendor documentation may require authentication. Confirm service unit, data directory and `initdb` procedure against the release documentation; **do not initialize an existing data directory**.
 
-The accompanying download provides **README.md, initial_scene.sql and demo_obstruction.sql**. Keep the other files from your working VM Git export.
+## 2. Install VMware PostgreSQL and extensions on a new VM
 
-## 3. Install and verify Tanzu PostgreSQL
-
-Install and initialize VMware PostgreSQL 18.6 using the approved vendor procedure and matching extension RPMs. Ensure the server is running.
-
-On the original installation, binaries are under `/opt/vmware/postgres/18/bin`. Add them to PATH:
+Transfer the official RHEL9 bundle to the VM, then:
 
 ```bash
-export PATH="/opt/vmware/postgres/18/bin:$PATH"
-psql --version
-psql -U postgres -d postgres -c \
-  "SELECT name,default_version FROM pg_available_extensions WHERE name IN ('postgis','vector');"
+mkdir -p /mnt/workshop_assets/postgres
+cd /mnt/workshop_assets/postgres
+unzip vmware-postgres-18.6.0.el9.x86_64.zip
+find . -type f -name '*.rpm' | sort
 ```
 
-For persistence, add the PATH export to `~/.bashrc` and ensure your login shell sources it.
+The original working VM had these RPM package identities:
 
-Both extensions must appear as available before proceeding.
+```text
+vmware-postgres18-18.6-1.el9.x86_64
+vmware-postgres18-libs-18.6-1.el9.x86_64
+vmware-postgres18-postgis36-3.6.1-1.el9.x86_64
+vmware-postgres18-pgvector-0.8.6-1.el9.x86_64
+```
 
-## 4. Install application source and Python dependencies
+Find the matching **actual filenames** before installing. For a fresh server, using the RPMs from the extracted bundle:
 
-Copy the repository to the VM, for example:
+```bash
+sudo dnf install \
+  ./vmware-postgres18-libs-18.6-1.el9.x86_64.rpm \
+  ./vmware-postgres18-18.6-1.el9.x86_64.rpm
+```
+
+Use the exact extracted paths if they differ. Do not mix community PostgreSQL extension packages with this vendor build. Initialize/start the server following the vendor's 18.6 procedure; service names and data directories can differ.
+
+```bash
+systemctl list-unit-files | grep -Ei 'postgres|vmware'
+rpm -ql vmware-postgres18 | grep -E 'systemd|initdb|service'
+```
+
+Then install matching extensions:
+
+```bash
+cd /mnt/workshop_assets/postgres
+sudo dnf install --assumeno \
+  ./vmware-postgres18-postgis36-3.6.1-1.el9.x86_64.rpm \
+  ./vmware-postgres18-pgvector-0.8.6-1.el9.x86_64.rpm
+
+sudo dnf install \
+  ./vmware-postgres18-postgis36-3.6.1-1.el9.x86_64.rpm \
+  ./vmware-postgres18-pgvector-0.8.6-1.el9.x86_64.rpm
+```
+
+`dnf` may require additional libraries such as `libdeflate` and `xerces-c`; use approved repositories. Never bypass dependencies using `--nodeps`.
+
+Verify and configure PATH:
+
+```bash
+export PATH=/opt/vmware/postgres/18/bin:$PATH
+psql --version
+pg_isready
+ls /opt/vmware/postgres/18/share/extension/ | grep -E '^(postgis|vector)\.control$'
+```
+
+Add the PATH export to `~/.bashrc` to persist across logins.
+
+## 3. Deploy source and Python environment
+
+Clone your approved Git repository or extract the source ZIP. Example:
 
 ```bash
 mkdir -p /mnt/workshop_assets
 cd /mnt/workshop_assets
-unzip tanzu-crime-scene-intelligence.zip
-cd tanzu-crime-demo   # replace with the actual extracted folder name
+# git clone <approved-repository-url> tanzu-crime-demo
+cd tanzu-crime-demo
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-If the repository has a reviewed `requirements.txt` compatible with Python 3.9:
+If you have a reviewed, compatible `requirements.txt`:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Otherwise install the application dependencies from your approved package repository:
+Otherwise install the dependencies using an approved PyPI repository or offline wheelhouse:
 
 ```bash
-python -m pip install "Flask>=2.3,<3.2" \
-  "psycopg[binary]>=3.1,<3.4" \
-  "numpy>=1.26,<2.1" "trimesh>=4,<5" "flask-cors>=4,<7"
+python -m pip install 'Flask>=2.3,<3.2' 'psycopg[binary]>=3.1,<3.4' \
+  'numpy>=1.26,<2.1' 'trimesh>=4,<5' 'flask-cors>=4,<7'
 ```
 
-For restricted networks, use approved internal PyPI credentials provided securely by your environment, or an offline wheelhouse with `--no-index --find-links`. Never commit credentials or access tokens.
+On a restricted VM, use an approved internal package index or `pip install --no-index --find-links /path/to/wheels ...`. Never commit internal repository credentials. Verify `frontend/vendor/three.module.js` is present.
 
-Verify:
+## 4. Initialize a **fresh** crime_scene database
 
-```bash
-python -c "import flask, psycopg, numpy, trimesh; print('Python OK')"
-test -s frontend/vendor/three.module.js && echo "Three.js OK"
-```
-
-## 5. Create and populate a NEW demo database
-
-**Run the following sequence only on a fresh `crime_scene` database.** Do not recreate or overwrite your already working VM database. The initial scene uses local Cartesian coordinates (SRID 0) and treats units as meters.
-
-Create database:
+**Do not run these steps on an already populated production or demo database.** The unified `database/schema.sql` contains all table definitions, extensions, indexes, original four buildings, 25 windows, one incident, test wall, and camera defaults. It is designed to be rerunnable without deleting records, but it is primarily intended for an empty demo database.
 
 ```bash
+export PATH=/opt/vmware/postgres/18/bin:$PATH
 createdb -U postgres crime_scene
-```
-
-If it already exists, do not run `createdb` again. Confirm it is an empty intended demo database before seeding.
-
-Create extensions and original city:
-
-```bash
-psql -U postgres -d crime_scene -v ON_ERROR_STOP=1 \
-  -f database/initial_scene.sql
-```
-
-Expected original scene: **4 buildings, 25 windows, 1 incident**.
-
-Create street-object schema and indexes:
-
-```bash
-psql -U postgres -d crime_scene -v ON_ERROR_STOP=1 \
-  -f database/schema.sql
-```
-
-Add vector-case schema and configure camera headings:
-
-```bash
-psql -U postgres -d crime_scene -v ON_ERROR_STOP=1 \
-  -f database/investigation_schema.sql
-```
-
-**Important:** `investigation_schema.sql` must use `mod(...::numeric, 360::numeric)` rather than `mod(double precision, integer)`. If your existing file has the earlier expression, correct it before running.
-
-Load the 42 generated scene objects:
-
-```bash
+cd /mnt/workshop_assets/tanzu-crime-demo
+psql -U postgres -d crime_scene -v ON_ERROR_STOP=1 -f database/schema.sql
 source .venv/bin/activate
 python scripts/load_scene.py
-```
-
-Load 60 synthetic vector cases:
-
-```bash
 python scripts/load_investigations.py
 ```
 
-Insert the wall used for the 23-visible/2-blocked workshop scenario:
+**Why the order matters:** `schema.sql` creates the `scene_objects` table and a camera-default trigger. `load_scene.py` then inserts 42 street objects, including four cameras; the trigger supplies `heading_deg`, `fov_deg` and `range_m`. `load_investigations.py` inserts 60 synthetic vector cases. The test wall is inserted by the schema itself.
+
+**No longer run** the retired files `database/initial_scene.sql`, `database/investigation_schema.sql`, or `database/demo_obstruction.sql`. The combined schema replaces them.
+
+Expected counts:
 
 ```bash
-psql -U postgres -d crime_scene -v ON_ERROR_STOP=1 \
-  -f database/demo_obstruction.sql
+psql -U postgres -d crime_scene -c "
+SELECT (SELECT count(*) FROM buildings) buildings,
+       (SELECT count(*) FROM windows) windows,
+       (SELECT count(*) FROM incidents) incidents,
+       (SELECT count(*) FROM scene_objects) objects,
+       (SELECT count(*) FROM investigation_cases) cases;"
 ```
 
-**Ordering matters:** `initial_scene.sql` creates the base tables; `schema.sql` adds `scene_objects`; `investigation_schema.sql` adds vector cases and CCTV attributes; loaders populate data; `demo_obstruction.sql` adds the test wall. The scene-object loader uses upserts, but always review changes before rerunning it on a modified demo scene.
+Expected on a clean seeded demo: **4 buildings, 25 windows, 1 incident, 43 objects (42 generated + test wall), 60 cases**.
 
-### Database validation
+Check extensions and camera settings:
 
 ```bash
 psql -U postgres -d crime_scene -c \
   "SELECT extname,extversion FROM pg_extension WHERE extname IN ('postgis','vector');"
-
-psql -U postgres -d crime_scene -c "
-SELECT
- (SELECT count(*) FROM buildings) AS buildings,
- (SELECT count(*) FROM windows) AS windows,
- (SELECT count(*) FROM incidents) AS incidents,
- (SELECT count(*) FROM scene_objects) AS objects,
- (SELECT count(*) FROM investigation_cases) AS cases;"
-```
-
-Expected on the unmodified seeded demo: **4 / 25 / 1 / 43 / 60**.
-
-Verify the test wall:
-
-```bash
 psql -U postgres -d crime_scene -c \
-  "SELECT name, enabled FROM scene_objects WHERE name='Investigation Test Wall';"
+  "SELECT name, dimensions->>'heading_deg' heading, dimensions->>'fov_deg' fov, dimensions->>'range_m' range FROM scene_objects WHERE object_type='camera';"
 ```
 
-## 6. Configure PostgreSQL connection
-
-The original Flask app uses the local PostgreSQL socket and database user `postgres`:
-
-```bash
-export PGDATABASE=crime_scene
-export PGUSER=postgres
-export PGHOST=/tmp
-export PGPORT=5432
-psql -U postgres -d crime_scene -c "SELECT current_database();"
-```
-
-On other VMs, check `SHOW unix_socket_directories;` and set `PGHOST` accordingly. PostgreSQL authentication must allow the selected local user.
-
-**Security limitation:** The demo's obstacle-update API is unauthenticated and uses the application's database credentials. Keep Flask bound to `127.0.0.1` and access it through an SSH tunnel. For shared or production deployments, use proper authentication and a least-privilege database role.
-
-## 7. Start the application
+## 5. Run the already deployed demo
 
 ```bash
 cd /mnt/workshop_assets/tanzu-crime-demo
-source .venv/bin/activate
-python backend/app.py
+chmod +x start_demo.sh
+./start_demo.sh
 ```
 
-Expected URL: `http://127.0.0.1:5000`. Keep the process running.
+`start_demo.sh` should configure VMware PostgreSQL binaries, activate `.venv`, check the database/extensions and Python dependencies, detect an already running demo, and start Flask on `127.0.0.1:5000`. The script prints the SSH tunnel command for the Mac. If the script is absent from your repository, copy the working version from your VM before publishing.
 
-From another VM terminal:
+On your Mac, in another terminal:
+
+```bash
+ssh -N -L 5000:127.0.0.1:5000 rocky@YOUR_VM_IP
+```
+
+Open **http://localhost:5000** in a WebGL-capable browser. Use the VM hostname or reachable IP that you normally SSH into, rather than assuming the first interface IP is reachable.
+
+To stop the demo, press `Ctrl+C` in the VM Flask terminal; stop the SSH tunnel with `Ctrl+C` on your Mac.
+
+## 6. API and application validation
 
 ```bash
 curl -fsS http://127.0.0.1:5000/api/health
@@ -232,57 +194,41 @@ curl -fsS 'http://127.0.0.1:5000/api/windows/visibility?x=0&y=0&z=1.5&k=5' | pyt
 curl -fsS 'http://127.0.0.1:5000/api/cctv/coverage?x=0&y=0&z=1.5' | python3 -m json.tool | head
 curl -fsSG --data-urlencode 'q=vehicle obstruction witness' \
   http://127.0.0.1:5000/api/investigations/search | python3 -m json.tool | head
+python tests/test_visibility.py
 ```
 
-On your Mac:
+Demo flow: analyze windows, move incident, toggle the investigation wall (original test: **23 visible / 2 blocked** versus **25 / 0**), analyze CCTV, show/hide camera sectors, search similar synthetic cases, inspect SQL and timings.
 
-```bash
-ssh -N -L 5000:127.0.0.1:5000 rocky@YOUR_VM_HOST
-```
+## 7. Troubleshooting
 
-Open `http://localhost:5000` in Chrome.
-
-## 8. Customer demo workflow
-
-1. **3D reconstruction:** Show buildings, 25 windows, street objects and the incident.
-2. **Visibility analysis:** Click Analyze 3D Visibility. PostGIS selects candidate windows; Python checks simplified 3D obstacles; Three.js draws green/red rays.
-3. **Dynamic incident:** Move the incident on the street and rerun analysis.
-4. **Obstacle toggle:** Disable/re-enable the Investigation Test Wall; in the original tested scene this changed **23 visible / 2 blocked** to **25 visible / 0 blocked**.
-5. **CCTV coverage:** Analyze cameras, show/hide approximate horizontal viewing sectors, and move the incident to compare.
-6. **pgvector:** Search synthetic cases with a phrase such as `vehicle obstruction witness`.
-7. **SQL and performance:** Show SQL queries and application timings. The database timing includes connection and fetch overhead, not PostgreSQL-only execution time.
-
-## 9. Troubleshooting
-
-| Symptom | Resolution |
+| Problem | Check |
 |---|---|
-| `psql: command not found` | Add `/opt/vmware/postgres/18/bin` to PATH |
-| `extension ... is not available` | Install matching vendor PostGIS/pgvector RPMs |
-| `relation windows does not exist` | Run `initial_scene.sql` before `schema.sql` |
-| `mod(double precision, integer)` | Correct `mod` operands to `numeric` in investigation schema |
-| Python DB authentication fails | Check `PGHOST`, `PGUSER`, Unix socket, `pg_hba.conf` |
-| Blank 3D page | Check WebGL, browser console, JS paths and local Three.js |
-| CCTV sectors missing | Run CCTV analysis; check camera heading/range/FOV |
-| No pgvector results | Verify `investigation_cases` contains seeded cases |
-| No blocked windows | Check wall `enabled`, incident `(0,0,1.5)` and geometry |
+| `psql` not found | Add `/opt/vmware/postgres/18/bin` to PATH |
+| Extensions unavailable | Install vendor-matched extension RPMs before running schema |
+| `relation windows does not exist` | Run unified schema in a fresh database before loaders |
+| `mod(double precision, integer)` | Use the corrected numeric cast in this unified schema |
+| Flask DB connection fails | Check PostgreSQL service, `/tmp` Unix socket, `PGHOST`, `PGUSER` and `pg_hba.conf` |
+| Browser blank | Check WebGL, browser console, `/js/main.js`, `/vendor/three.module.js` |
+| CCTV cones missing | Click Analyze CCTV Coverage; inspect camera heading/range/FOV |
+| Vector results missing | Verify 60 `investigation_cases` records and vector extension |
+| No blocked windows | Ensure test wall enabled and incident at `(0,0,1.5)` |
 
-## 10. Backup, rollback and Git
+## 8. Security, backups and Git hygiene
 
-Before changing the running demo:
+The workshop obstacle toggle API uses the application's PostgreSQL account and is unauthenticated. **Do not expose this Flask development server to an untrusted network.** Keep it on localhost and use SSH port forwarding. For shared deployments, add authentication and least-privilege database roles.
+
+Back up before upgrading:
 
 ```bash
 mkdir -p /mnt/workshop_assets/project_backups
-tar --exclude='.venv' --exclude='backups' \
-  -czf /mnt/workshop_assets/project_backups/source.tar.gz \
-  backend frontend database scripts tests
-
 pg_dump -U postgres -d crime_scene -Fc \
-  -f /mnt/workshop_assets/project_backups/database.dump
+  -f /mnt/workshop_assets/project_backups/crime-scene.dump
+tar --exclude='.venv' --exclude='backups' -czf \
+  /mnt/workshop_assets/project_backups/crime-scene-source.tar.gz \
+  backend frontend database scripts tests
 ```
 
-Restore into a separate empty database when testing recovery. Never restore over the active database without an explicit rollback plan.
-
-Recommended `.gitignore`:
+Do not commit database dumps, credentials, `.venv`, `__pycache__`, logs, or private package repository tokens. Keep third-party license notices for the bundled Three.js module. Use `.gitignore`:
 
 ```gitignore
 .venv/
@@ -299,135 +245,17 @@ backups/
 .DS_Store
 ```
 
+## 9. Git update
 
-## Starting the Demo
-
-Once Tanzu PostgreSQL, PostGIS, pgvector, and the Python dependencies are installed and the database is populated, the demo can be started using a single script.
-
-### 1. Connect to the Rocky Linux VM
-
-From your Mac terminal:
+Once validated on a **fresh test database**, replace `database/schema.sql` and `README.md` in your repository. Remove the retired SQL files **from Git only after verifying they are no longer referenced**:
 
 ```bash
-ssh rocky@YOUR_VM_IP
+git add database/schema.sql README.md
+git rm database/initial_scene.sql database/investigation_schema.sql database/demo_obstruction.sql  # only if tracked
+# Review staged changes and secrets before committing.
+git status
+git commit -m "Consolidate crime scene database schema and deployment guide"
+git push origin main
 ```
 
-### 2. Start the application
-
-Navigate to the project directory:
-
-```bash
-cd /mnt/workshop_assets/tanzu-crime-demo
-```
-
-Make the startup script executable (first time only):
-
-```bash
-chmod +x start_demo.sh
-```
-
-Start the demo:
-
-```bash
-./start_demo.sh
-```
-
-The startup script automatically:
-
-- Configures the VMware PostgreSQL 18 binary path.
-- Activates the existing Python virtual environment.
-- Checks that Tanzu PostgreSQL is running.
-- Verifies connectivity to the `crime_scene` database.
-- Validates that PostGIS and pgvector are enabled.
-- Checks required Python dependencies and application files.
-- Detects whether the demo is already running.
-- Starts the Flask application on port 5000.
-- Displays the SSH tunnel command for browser access.
-
-### 3. Access the demo from your Mac
-
-Keep the VM terminal running.
-
-Open a **new terminal on your Mac** and execute the SSH command displayed by the startup script:
-
-```bash
-ssh -N -L 5000:127.0.0.1:5000 rocky@YOUR_VM_IP
-```
-
-Replace `YOUR_VM_IP` with the reachable IP address or hostname of your VM.
-
-Keep this terminal open while using the demo.
-
-### 4. Open the dashboard
-
-Open Chrome or another WebGL-enabled browser:
-
-**http://localhost:5000**
-
-The dashboard provides:
-
-- Interactive 3D crime-scene visualization.
-- PostGIS-powered spatial and line-of-sight analysis.
-- Dynamic incident relocation and obstacle management.
-- CCTV coverage and field-of-view visualization.
-- pgvector-based similar investigation search.
-- SQL query inspection and application performance metrics.
-
-### 5. Stop the application
-
-To stop the demo, return to the VM terminal running Flask and press:
-
-```text
-Ctrl+C
-```
-
-Close the SSH tunnel from the Mac terminal using `Ctrl+C`.
-
-### Troubleshooting
-
-**PostgreSQL is not accepting connections**
-
-Verify that the PostgreSQL server is running:
-
-```bash
-/opt/vmware/postgres/18/bin/pg_isready
-```
-
-**Python virtual environment not found**
-
-Verify the existing virtual environment:
-
-```bash
-ls -ld /mnt/workshop_assets/tanzu-crime-demo/.venv
-```
-
-**Port 5000 is already in use**
-
-Check whether the demo is already running:
-
-```bash
-curl http://127.0.0.1:5000/api/health
-```
-
-**Dashboard is not accessible from the Mac**
-
-Ensure the SSH tunnel is running and open:
-
-```text
-http://localhost:5000
-```
-
-The Flask application binds to localhost for the workshop environment and should not be exposed directly to an untrusted network.
-
-
-
-## Deployment readiness
-
-The three accompanying files fill the missing initial-scene and test-wall setup gaps. **The full fresh-VM deployment still depends on your existing `schema.sql`, `investigation_schema.sql`, Python scripts, Flask frontend source and compatible Three.js library.** Validate on a fresh demo VM before presenting it as a fully tested one-command deployment.
-
-## VMware Tanzu PostgreSQL Installation
-
-For PostgreSQL 18.6 installation, PostGIS and pgvector setup,
-and environment prerequisites, see:
-
-[PostgreSQL Installation Guide](POSTGRES_INSTALL.md)
+**Compatibility note:** This unified schema was authored from the working demo's documented table structure and sample data. It has not been executed against your VM. Always test in a separate empty `crime_scene` database before relying on it for a customer workshop.
