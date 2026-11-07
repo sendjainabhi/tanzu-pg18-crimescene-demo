@@ -101,6 +101,38 @@ ranks matching investigations by similarity.
 
 ---
 
+
+---
+
+## Demo Screenshot Gallery
+
+Explore the Tanzu PostgreSQL 3D Crime Scene Intelligence demo through the screenshots below.
+
+The application combines PostGIS spatial analysis, pgvector similarity search, interactive 3D visualization, CCTV coverage and investigation workflows.
+
+### Screenshot 1 — 3D Crime Scene Overview
+
+![3D Crime Scene Overview](img/img1.png)
+
+### Screenshot 2 — Interactive Investigation View
+
+![Interactive Investigation View](img/img2.png)
+
+### Screenshot 3 — Spatial Visibility Analysis
+
+![Spatial Visibility Analysis](img/img3.png)
+
+### Screenshot 4 — CCTV and Investigation Visualization
+
+![CCTV and Investigation Visualization](img/img4.png)
+
+### Screenshot 5 — PostgreSQL Intelligence Dashboard
+
+![PostgreSQL Intelligence Dashboard](img/img5.png)
+
+---
+
+
 ## 2. Technology Stack
 
 | Component | Technology |
