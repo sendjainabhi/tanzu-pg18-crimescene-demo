@@ -1,3 +1,7 @@
+
+import math
+from hybrid_search import hybrid_search
+
 import json
 import math
 import os
@@ -78,7 +82,7 @@ def get_scene():
             buildings = cur.fetchall()
 
             cur.execute("""
-                SELECT id, building_id, floor_no,
+                SELECT id, building_id, floor_no, facade,
                        ST_X(position) AS x,
                        ST_Y(position) AS y,
                        ST_Z(position) AS z
@@ -165,7 +169,7 @@ def visibility_api():
         or not (-55 <= x <= 55)
         or not (-55 <= y <= 55)
         or not (0 <= z <= 20)
-        or not (1 <= k <= 25)
+        or not (1 <= k <= 100)
     ):
         return jsonify({"error": "Out of range"}), 400
 
@@ -225,6 +229,90 @@ def investigation_search_api():
 
     return jsonify(search_cases(query))
 
+
+
+@app.get("/api/investigations/hybrid")
+def hybrid_investigation_api():
+    query = request.args.get("q", "").strip()
+
+    if not query or len(query) > 300:
+        return jsonify({"error": "Invalid query"}), 400
+
+    try:
+        x = float(request.args.get("x", 0))
+        y = float(request.args.get("y", 0))
+        z = float(request.args.get("z", 1.5))
+        radius = float(request.args.get("radius", 30))
+        limit = int(request.args.get("limit", 5))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid parameters"}), 400
+
+    if not all(math.isfinite(v) for v in (x,y,z,radius)):
+        return jsonify({"error": "Invalid numeric values"}), 400
+
+    if not (
+        -55 <= x <= 55 and
+        -55 <= y <= 55 and
+        0 <= z <= 20 and
+        1 <= radius <= 150 and
+        1 <= limit <= 20
+    ):
+        return jsonify({"error": "Parameters out of range"}), 400
+
+    return jsonify(
+        hybrid_search(query, x, y, z, radius, limit)
+    )
+
+
+@app.get("/api/windows/smart")
+def smart_visibility_api():
+    from spatial_analysis import calculate_visibility
+
+    try:
+        x = float(request.args.get("x", 0))
+        y = float(request.args.get("y", 0))
+        z = float(request.args.get("z", 1.5))
+        k = int(request.args.get("k", 10))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid parameters"}), 400
+
+    if not all(math.isfinite(v) for v in (x,y,z)):
+        return jsonify({"error": "Invalid coordinates"}), 400
+
+    if not (-55 <= x <= 55 and -55 <= y <= 55
+            and 0 <= z <= 20 and 1 <= k <= 100):
+        return jsonify({"error": "Parameters out of range"}), 400
+
+    # Request all visible windows so the three categories
+    # cover every candidate, not just the nearest five.
+    result = calculate_visibility(x, y, z, 100)
+
+    visible = result["visible_windows"]
+    blocked = result["blocked_windows"]
+
+    not_facing = [
+        w for w in blocked
+        if "Target facade not facing incident"
+        in w.get("blockers", [])
+    ]
+
+    obstructed = [
+        w for w in blocked
+        if w not in not_facing
+    ]
+
+    return jsonify({
+        "incident": {"x": x, "y": y, "z": z},
+        "candidate_count": result["candidate_count"],
+        "visible_count": len(visible),
+        "obstructed_count": len(obstructed),
+        "not_facing_count": len(not_facing),
+        "visible_windows": visible[:k],
+        "obstructed_windows": obstructed,
+        "not_facing_windows": not_facing,
+        "sql": result["sql"],
+        "parameters": result["parameters"]
+    })
 
 if __name__ == "__main__":
     app.run(

@@ -1,10 +1,19 @@
 import * as THREE from '../vendor/three.module.js';
 
 export class VisibilityView {
-  constructor(scene,markers) {
+  constructor(scene, markers) {
     this.scene = scene;
     this.markers = markers;
     this.lines = [];
+    this.visible = true;
+  }
+
+  setVisible(value) {
+    this.visible = value;
+
+    for (const line of this.lines) {
+      line.visible = value;
+    }
   }
 
   clear() {
@@ -13,43 +22,67 @@ export class VisibilityView {
       line.geometry.dispose();
       line.material.dispose();
     }
+
     this.lines = [];
 
-    for (const marker of this.markers.values()) {
-      marker.material.color.setHex(0x62baff);
+    for (const mesh of this.markers.values()) {
+      mesh.material.color.setHex(0x62baff);
     }
   }
 
-  draw(incident,result) {
+  draw(incident, result) {
     this.clear();
 
     const start = new THREE.Vector3(
-      incident.x,incident.z,incident.y
+      incident.x,
+      incident.z,
+      incident.y
     );
 
-    const addRay = (w,color) => {
-      const marker = this.markers.get(w.id);
-      if (!marker) return;
-
-      marker.material.color.setHex(color);
-
-      const end = new THREE.Vector3(w.x,w.z,w.y);
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([
-          start,end
-        ]),
-        new THREE.LineBasicMaterial({color})
+    const drawRay = (windowData, color) => {
+      const mesh = this.markers.get(
+        windowData.id
       );
+
+      if (!mesh) return;
+
+      mesh.material.color.setHex(color);
+
+      const end = new THREE.Vector3(
+        windowData.x,
+        windowData.z,
+        windowData.y
+      );
+
+      const geometry = new THREE.BufferGeometry()
+        .setFromPoints([start, end]);
+
+      const material = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+        depthWrite: false
+      });
+
+      const line = new THREE.Line(
+        geometry,
+        material
+      );
+
+      line.renderOrder = 20;
+      line.visible = this.visible;
+
       this.scene.add(line);
       this.lines.push(line);
     };
 
-    for (const w of result.blocked_windows) {
-      addRay(w,0xff5555);
+    for (const windowData of result.blocked_windows) {
+      drawRay(windowData, 0xff5555);
     }
 
-    for (const w of result.visible_windows) {
-      addRay(w,0x35e6a4);
+    for (const windowData of result.visible_windows) {
+      drawRay(windowData, 0x35e6a4);
     }
   }
 }
